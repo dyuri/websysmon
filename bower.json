@@ -1,0 +1,9 @@
+{
+  "name": "websysmon",
+  "version": "0.0.1",
+  "dependencies": {
+    "d3": "~3.x",
+    "cubism": "~1.6"
+  },
+  "private": true
+}
