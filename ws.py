@@ -3,6 +3,7 @@
 import asyncio
 import psutil
 import simplejson
+import datetime
 from ws4py.async_websocket import WebSocket
 from ws4py.server.tulipserver import WebSocketProtocol
 
@@ -11,9 +12,13 @@ websockets = []
 @asyncio.coroutine
 def sysinfo():
     while True:
-        cpu_percent = psutil.cpu_percent()
+        cpu_percent = psutil.cpu_percent(None, True)
+        ts = int(datetime.datetime.now().timestamp() * 1000)
         response = {
-            "cpu": cpu_percent
+            "cpu": {
+                "values": cpu_percent,
+                "timestamp": ts
+            }
         }
         json_response = simplejson.dumps(response)
         for ws in websockets:

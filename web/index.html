@@ -3,10 +3,105 @@
 <head>
   <meta charset="UTF-8">
   <title>System monitor</title>
+  <style>
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, sans-serif;
+    margin: 30px auto;
+    position: relative;
+  }
+
+  header {
+    padding: 6px 0;
+  }
+
+  .group {
+    margin-bottom: 1em;
+  }
+
+  .axis {
+    font: 10px sans-serif;
+    pointer-events: none;
+  }
+
+  .axis text {
+    -webkit-transition: fill-opacity 250ms linear;
+  }
+
+  .axis path {
+    display: none;
+  }
+
+  .axis line {
+    stroke: #000;
+    shape-rendering: crispEdges;
+  }
+
+  .axis.top {
+    background-image: linear-gradient(top, #fff 0%, rgba(255,255,255,0) 100%);
+    background-image: -o-linear-gradient(top, #fff 0%, rgba(255,255,255,0) 100%);
+    background-image: -moz-linear-gradient(top, #fff 0%, rgba(255,255,255,0) 100%);
+    background-image: -webkit-linear-gradient(top, #fff 0%, rgba(255,255,255,0) 100%);
+    background-image: -ms-linear-gradient(top, #fff 0%, rgba(255,255,255,0) 100%);
+    top: 0px;
+    padding: 0 0 24px 0;
+  }
+
+  .axis.bottom {
+    background-image: linear-gradient(bottom, #fff 0%, rgba(255,255,255,0) 100%);
+    background-image: -o-linear-gradient(bottom, #fff 0%, rgba(255,255,255,0) 100%);
+    background-image: -moz-linear-gradient(bottom, #fff 0%, rgba(255,255,255,0) 100%);
+    background-image: -webkit-linear-gradient(bottom, #fff 0%, rgba(255,255,255,0) 100%);
+    background-image: -ms-linear-gradient(bottom, #fff 0%, rgba(255,255,255,0) 100%);
+    bottom: 0px;
+    padding: 24px 0 0 0;
+  }
+
+  .horizon {
+    border-bottom: solid 1px #000;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .horizon {
+    border-top: solid 1px #000;
+    border-bottom: solid 1px #000;
+  }
+
+  .horizon + .horizon {
+    border-top: none;
+  }
+
+  .horizon canvas {
+    display: block;
+  }
+
+  .horizon .title,
+  .horizon .value {
+    bottom: 0;
+    line-height: 30px;
+    margin: 0 6px;
+    position: absolute;
+    text-shadow: 0 1px 0 rgba(255,255,255,.5);
+    white-space: nowrap;
+  }
+
+  .horizon .title {
+    left: 0;
+  }
+
+  .horizon .value {
+    right: 0;
+  }
+
+  .line {
+    background: #000;
+    z-index: 2;
+  }
+
+  </style>
 </head>
 <body>
-  <div id="stat">
-  </div>
   <div id="proba">
   </div>
 <script src="lib/d3/d3.min.js"></script>
@@ -14,15 +109,12 @@
 <script>
 (function () {
 var wsUri = "ws://"+window.location.hostname+":9007/";
-var stat = document.getElementById("stat");
 var ws = new WebSocket(wsUri);
 
 var dataBuffer = [];
 
 ws.onmessage = function (e) {
   var data = JSON.parse(e.data);
-
-  stat.innerHTML = "<h1>CPU: "+data.cpu+"</h1>"
 
   data.timestamp = +(new Date());
 
@@ -39,14 +131,38 @@ var context = cubism.context()
     .step(1e3)
     .size(960);
 
+var get
+
 var cpuMetric = context.metric(function (start, stop, step, callback) {
+  var values, qValues = [], quant, dataStart, dataStop, current;
+
   start = +start;
   stop = +stop;
-  values = dataBuffer.filter(function (data) {
-    return data.timestamp >= start && data.timestamp <= stop;
-  }).map(function (data) { return data.cpu; });
+  dataStart = start;
+  dataStop = stop;
 
-  callback(null, values);
+  values = dataBuffer.filter(function (data) {
+    return +data.cpu.timestamp >= start && +data.cpu.timestamp <= stop;
+  });
+
+  if (values.length) {
+    dataStart = +values[0].cpu.timestamp;
+    dataStop = +values[values.length-1].cpu.timestamp;
+  }
+  
+  values = values.map(function (data) { return data.cpu.values[0]; });
+
+  quant = d3.scale.quantize().domain([dataStart, dataStop]).range(values);
+
+  for (current = start; current <= stop; current += step) {
+    if (current+step >= dataStart && current-step <= dataStop) {
+      qValues.push(quant(current) || NaN);
+    } else {
+      qValues.push(NaN);
+    }
+  }
+
+  callback(null, qValues);
 }, "cpu");
 
 var cpu = cpuMetric;
@@ -63,18 +179,13 @@ d3.select("#proba").call(function(div) {
       .attr("class", "horizon")
       .call(context.horizon()
         .extent([0, 100])
-        .height(120)
-        .colors(["green", "green", "green", "green", "green", "blue", "yellow", "red"])
+        .height(50)
       );
 
   div.append("div")
       .attr("class", "rule")
       .call(context.rule());
 
-});
-
-context.on("focus", function(i) {
-  d3.selectAll(".value").style("right", i == null ? null : context.size() - i + "px");
 });
 
 }());
