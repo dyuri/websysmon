@@ -112,16 +112,22 @@ var wsUri = "ws://"+window.location.hostname+":9007/";
 var ws = new WebSocket(wsUri);
 
 var dataBuffer = [];
+var configured = false;
+var height = 50;
 
 ws.onmessage = function (e) {
   var data = JSON.parse(e.data);
 
-  data.timestamp = +(new Date());
+  if (data.data) {
+    dataBuffer.push(data.data);
 
-  dataBuffer.push(data);
+    if (dataBuffer.length > 1000) {
+      dataBuffer = dataBuffer.slice(-1000);
+    }
+  }
 
-  if (dataBuffer.length > 1000) {
-    dataBuffer = dataBuffer.slice(-1000);
+  if (data.configuration && !configured) {
+    configure(data.configuration);
   }
 };
 
@@ -131,62 +137,82 @@ var context = cubism.context()
     .step(1e3)
     .size(960);
 
-var get
+var configure = function (configuration) {
+  d3.select("#proba").call(function(div) {
 
-var cpuMetric = context.metric(function (start, stop, step, callback) {
-  var values, qValues = [], quant, dataStart, dataStop, current;
+    div.append("div")
+        .attr("class", "axis")
+        .call(context.axis().orient("top"));
 
-  start = +start;
-  stop = +stop;
-  dataStart = start;
-  dataStop = stop;
+    Object.keys(configuration).forEach(function (key) {
+      var metrics = [], i, graph, conf = configuration[key];
 
-  values = dataBuffer.filter(function (data) {
-    return +data.cpu.timestamp >= start && +data.cpu.timestamp <= stop;
+      if (conf.valueCount > 1) {
+        for (i = 0; i < conf.valueCount; i++) {
+          metrics.push(getMetric(dataBuffer, conf.name, i));
+        }
+      } else {
+        metrics.push(getMetric(dataBuffer, conf.name));
+      }
+
+      graph = context.horizon().height(height * (conf.height || 1));
+
+      if (conf.extent) {
+        graph = graph.extent(conf.extent);
+      }
+      if (conf.colors) {
+        graph = graph.colors(conf.colors);
+      }
+
+      div.selectAll(".horizon-"+key)
+          .data(metrics)
+        .enter().append("div")
+          .attr("class", "horizon horizon-"+key)
+          .call(graph);
+    });
+
+    div.append("div")
+        .attr("class", "rule")
+        .call(context.rule());
+
   });
+};
 
-  if (values.length) {
-    dataStart = +values[0].cpu.timestamp;
-    dataStop = +values[values.length-1].cpu.timestamp;
-  }
-  
-  values = values.map(function (data) { return data.cpu.values[0]; });
+var getMetric = function (dataBuffer, key, index) {
 
-  quant = d3.scale.quantize().domain([dataStart, dataStop]).range(values);
+  return context.metric(function (start, stop, step, callback) {
+    var values, qValues = [], quant, dataStart, dataStop, current;
 
-  for (current = start; current <= stop; current += step) {
-    if (current+step >= dataStart && current-step <= dataStop) {
-      qValues.push(quant(current) || NaN);
-    } else {
-      qValues.push(NaN);
+    dataStart = start = +start;
+    dataStop = stop = +stop;
+
+    values = dataBuffer.filter(function (d) {
+      return +d[key].timestamp >= start && +d[key].timestamp <= stop; 
+    });
+
+    if (values.length) {
+      dataStart = +values[0][key].timestamp;
+      dataStop = +values[values.length - 1][key].timestamp;
     }
-  }
 
-  callback(null, qValues);
-}, "cpu");
+    values = values.map(function (d) {
+      return d[key].values.length ? d[key].values[index || 0] : d[key].values;
+    });
 
-var cpu = cpuMetric;
+    quant = d3.scale.quantize().domain([dataStart, dataStop]).range(values);
 
-d3.select("#proba").call(function(div) {
+    for (current = start; current <= stop; current += step) {
+      if (current + step >= dataStart && current - step <= dataStop) {
+        qValues.push(quant(current) || NaN);
+      } else {
+        qValues.push(NaN);
+      }
+    }
 
-  div.append("div")
-      .attr("class", "axis")
-      .call(context.axis().orient("top"));
 
-  div.selectAll(".horizon")
-      .data([cpu])
-    .enter().append("div")
-      .attr("class", "horizon")
-      .call(context.horizon()
-        .extent([0, 100])
-        .height(50)
-      );
-
-  div.append("div")
-      .attr("class", "rule")
-      .call(context.rule());
-
-});
+    callback(null, qValues);
+  }, key + (index === undefined ? "" : index));
+};
 
 }());
 </script>
