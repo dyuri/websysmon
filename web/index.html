@@ -111,7 +111,7 @@
 var wsUri = "ws://"+window.location.hostname+":9007/";
 var ws = new WebSocket(wsUri);
 
-var dataBuffer = [];
+var dataBuffer = {buffer: []};
 var configured = false;
 var height = 50;
 
@@ -119,10 +119,10 @@ ws.onmessage = function (e) {
   var data = JSON.parse(e.data);
 
   if (data.data) {
-    dataBuffer.push(data.data);
+    dataBuffer.buffer.push(data.data);
 
-    if (dataBuffer.length > 1000) {
-      dataBuffer = dataBuffer.slice(-1000);
+    if (dataBuffer.buffer.length > 100) {
+      dataBuffer.buffer = dataBuffer.buffer.slice(-100);
     }
   }
 
@@ -186,7 +186,7 @@ var getMetric = function (dataBuffer, key, index) {
     dataStart = start = +start;
     dataStop = stop = +stop;
 
-    values = dataBuffer.filter(function (d) {
+    values = dataBuffer.buffer.filter(function (d) {
       return +d[key].timestamp >= start && +d[key].timestamp <= stop; 
     });
 
