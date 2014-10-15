@@ -15,29 +15,30 @@
     padding: 6px 0;
   }
 
-  .group {
+  /* cubism */
+  .cubism .group {
     margin-bottom: 1em;
   }
 
-  .axis {
+  .cubism .axis {
     font: 10px sans-serif;
     pointer-events: none;
   }
 
-  .axis text {
+  .cubism .axis text {
     -webkit-transition: fill-opacity 250ms linear;
   }
 
-  .axis path {
+  .cubism .axis path {
     display: none;
   }
 
-  .axis line {
+  .cubism .axis line {
     stroke: #000;
     shape-rendering: crispEdges;
   }
 
-  .axis.top {
+  .cubism .axis.top {
     background-image: linear-gradient(top, #fff 0%, rgba(255,255,255,0) 100%);
     background-image: -o-linear-gradient(top, #fff 0%, rgba(255,255,255,0) 100%);
     background-image: -moz-linear-gradient(top, #fff 0%, rgba(255,255,255,0) 100%);
@@ -47,7 +48,7 @@
     padding: 0 0 24px 0;
   }
 
-  .axis.bottom {
+  .cubism .axis.bottom {
     background-image: linear-gradient(bottom, #fff 0%, rgba(255,255,255,0) 100%);
     background-image: -o-linear-gradient(bottom, #fff 0%, rgba(255,255,255,0) 100%);
     background-image: -moz-linear-gradient(bottom, #fff 0%, rgba(255,255,255,0) 100%);
@@ -57,27 +58,27 @@
     padding: 24px 0 0 0;
   }
 
-  .horizon {
+  .cubism .horizon {
     border-bottom: solid 1px #000;
     overflow: hidden;
     position: relative;
   }
 
-  .horizon {
+  .cubism .horizon {
     border-top: solid 1px #000;
     border-bottom: solid 1px #000;
   }
 
-  .horizon + .horizon {
+  .cubism .horizon + .horizon {
     border-top: none;
   }
 
-  .horizon canvas {
+  .cubism .horizon canvas {
     display: block;
   }
 
-  .horizon .title,
-  .horizon .value {
+  .cubism .horizon .title,
+  .cubism .horizon .value {
     bottom: 0;
     line-height: 30px;
     margin: 0 6px;
@@ -86,23 +87,36 @@
     white-space: nowrap;
   }
 
-  .horizon .title {
+  .cubism .horizon .title {
     left: 0;
   }
 
-  .horizon .value {
+  .cubism .horizon .value {
     right: 0;
   }
 
-  .line {
+  .cubism .line {
     background: #000;
     z-index: 2;
   }
 
+  /* cubism end */
+
+  /* line */
+  .d3line path {
+    stroke: steelblue;
+    stroke-width: 1;
+    fill: none;
+  }
+
+  /* line end */
+
   </style>
 </head>
 <body>
-  <div id="proba">
+  <div id="cubism">
+  </div>
+  <div id="line">
   </div>
 <script src="lib/d3/d3.min.js"></script>
 <script src="lib/cubism/cubism.v1.min.js"></script>
@@ -113,7 +127,7 @@ var ws = new WebSocket(wsUri);
 
 var dataBuffer = {buffer: []};
 var configured = false;
-var height = 50;
+var height = 50, width = 960;
 
 ws.onmessage = function (e) {
   var data = JSON.parse(e.data);
@@ -121,8 +135,8 @@ ws.onmessage = function (e) {
   if (data.data) {
     dataBuffer.buffer.push(data.data);
 
-    if (dataBuffer.buffer.length > 100) {
-      dataBuffer.buffer = dataBuffer.buffer.slice(-100);
+    if (dataBuffer.buffer.length > width) {
+      dataBuffer.buffer = dataBuffer.buffer.slice(-width);
     }
   }
 
@@ -131,14 +145,17 @@ ws.onmessage = function (e) {
   }
 };
 
+/* cubism */
 var context = cubism.context()
     .serverDelay(0)
     .clientDelay(0)
     .step(1e3)
-    .size(960);
+    .size(width);
 
-var configure = function (configuration) {
-  d3.select("#proba").call(function(div) {
+var configure_cubism = function (configuration) {
+  d3.select("#cubism").call(function(div) {
+
+    div.attr("class", "cubism");
 
     div.append("div")
         .attr("class", "axis")
@@ -209,9 +226,75 @@ var getMetric = function (dataBuffer, key, index) {
       }
     }
 
-
     callback(null, qValues);
   }, key + (index === undefined ? "" : index));
+};
+
+/* cubism end */
+
+/* normal d3 charts */
+var configure_line = function (configuration) {
+  d3.select("#line").call(function(div) {
+    div.attr('class', 'd3line');
+
+    var delay = 1000;
+
+    var redraw = function (graph, line, key, xScale) {
+      var animStart = 0, animStop = 0;
+
+      // TODO !!!
+      xScale.domain(d3.extent(dataBuffer.buffer, function(d) { return new Date(d[key].timestamp); }));
+
+      if (dataBuffer.buffer.length > 2) {
+        animStart = xScale(new Date(dataBuffer.buffer[1][key].timestamp));
+        animStop = xScale(new Date(dataBuffer.buffer[0][key].timestamp));
+      }
+
+      graph.selectAll('path')
+        .data([dataBuffer.buffer])
+        .attr('transform', 'translate('+animStart+')')
+        .attr('d', line)
+        .transition()
+        .ease('linear')
+        .duration(delay*.9)
+        .attr('transform', 'translate('+animStop+')');
+    };
+
+    Object.keys(configuration).forEach(function (key) {
+      var graph = div.append('svg:svg')
+            .attr('width', width)
+            .attr('height', height * 5);
+
+      var xScale = d3.time.scale()
+            .range([0, width]);
+
+      var yScale = d3.scale.linear()
+            .range([height * 5, 0])
+            .domain(configuration.extent || [0, 100]);
+
+      var line = d3.svg.line()
+          .x(function (d, i) {
+            return xScale(new Date(d[key].timestamp));
+          })
+          .y(function (d, i) {
+            return yScale(d[key].values.length ? d[key].values[0] : d[key].values);
+          })
+          .interpolate('linear');
+
+      graph.append('svg:path').attr('d', line(dataBuffer.buffer));
+
+      setInterval(function () {
+        redraw(graph, line, key, xScale);
+      }, delay);
+    });
+
+  });
+};
+/* normal d3 charts end */
+
+var configure = function (c) {
+  configure_line(c);
+  configure_cubism(c);
 };
 
 }());
