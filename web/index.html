@@ -270,7 +270,7 @@ var configure_line = function (configuration) {
 
       var yScale = d3.scale.linear()
             .range([height * 5, 0])
-            .domain(configuration.extent || [0, 100]);
+            .domain(configuration[key].extent || [0, 100]);
 
       var line = d3.svg.line()
           .x(function (d, i) {
