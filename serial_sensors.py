@@ -6,13 +6,13 @@ PSPEED = 9600
 
 
 def get_values(port=PORT, pspeed=PSPEED):
+    lines = {}
+    line = ""
+
     try:
         ser = serial.Serial(PORT, PSPEED)
     except:
-        return None
-
-    lines = {}
-    line = ""
+        return lines
 
     while line != ">":
         line = ser.readline().decode("latin-1").strip()

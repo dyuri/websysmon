@@ -213,7 +213,7 @@ var getMetric = function (dataBuffer, key, index) {
     }
 
     values = values.map(function (d) {
-      return d[key].values.length ? d[key].values[index || 0] : d[key].values;
+      return (d[key].values && d[key].values.length) ? d[key].values[index || 0] : (d[key].values || 0);
     });
 
     quant = d3.scale.quantize().domain([dataStart, dataStop]).range(values);
@@ -277,7 +277,7 @@ var configure_line = function (configuration) {
             return xScale(new Date(d[key].timestamp));
           })
           .y(function (d, i) {
-            return yScale(d[key].values.length ? d[key].values[0] : d[key].values);
+            return yScale((d[key].values && d[key].values.length) ? d[key].values[0] : (d[key].values || 0));
           })
           .interpolate('linear');
 
