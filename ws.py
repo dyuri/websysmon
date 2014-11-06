@@ -7,6 +7,8 @@ import datetime
 from ws4py.async_websocket import WebSocket
 from ws4py.server.tulipserver import WebSocketProtocol
 
+from serial_sensors import get_value
+
 websockets = []
 probes = []
 
@@ -22,6 +24,9 @@ class Probe():
 
     def get_configuration(self):
         raise NotImplementedError()
+
+    def get_ts(self):
+        return int(datetime.datetime.now().timestamp() * 1000)
 
 
 class CpuProbe(Probe):
@@ -39,11 +44,10 @@ class CpuProbe(Probe):
     # TODO cache, history (timestamp)
     def get_values(self):
         cpu_percent = psutil.cpu_percent(None, True)
-        ts = int(datetime.datetime.now().timestamp() * 1000)
 
         return {
             "values": cpu_percent,
-            "timestamp": ts,
+            "timestamp": self.get_ts(),
         }
 
 
@@ -63,16 +67,42 @@ class SingleCpuProbe(Probe):
 
     def get_values(self):
         cpu_percent = psutil.cpu_percent()
-        ts = int(datetime.datetime.now().timestamp() * 1000)
 
         return {
             "values": cpu_percent,
-            "timestamp": ts,
+            "timestamp": self.get_ts(),
         }
 
 
+class ArduinoSingleSensorProbe(Probe):
+
+    def __init__(self, sensor, port=None, pspeed=None, extent=None):
+        super().__init__(sensor)
+        self.sensor = sensor
+        self.port = port
+        self.pspeed = pspeed
+        self.extent = extent
+
+    def get_configuration(self):
+        return {
+            "name": self.name,
+            "valueCount": self.valueCount,
+            "extent": self.extent if self.extent else [0, 255],
+            "height": 4,
+        }
+
+    def get_values(self):
+        value = get_value(self.port, self.pspeed, self.sensor)
+
+        return {
+            "values": value,
+            "timestamp": self.get_ts(),
+        }
+
 probes.append(CpuProbe())
 probes.append(SingleCpuProbe())
+probes.append(ArduinoSingleSensorProbe("light"))
+probes.append(ArduinoSingleSensorProbe("temperature", extent=[15, 40]))
 
 
 @asyncio.coroutine
