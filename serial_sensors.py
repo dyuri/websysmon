@@ -3,11 +3,21 @@ import time
 
 PORT = "/dev/sensors/ftdi_12345"
 PSPEED = 9600
+CACHE_TIME = 1
+
+
+cache = {}
 
 
 def get_values(port=PORT, pspeed=PSPEED):
     lines = {}
     line = ""
+    cache_key = port
+    ts = time.time()
+
+    if cache.get(cache_key, None) and \
+            cache[cache_key]["ts"] + CACHE_TIME > ts:
+        return cache[cache_key]["value"]
 
     try:
         ser = serial.Serial(PORT, PSPEED)
@@ -23,6 +33,11 @@ def get_values(port=PORT, pspeed=PSPEED):
         key, value = line.split(":")
         lines[key.strip()] = float(value.strip())
         line = ser.readline().decode("latin-1").strip()
+
+    cache[cache_key] = {
+        "ts": ts,
+        "value": lines,
+    }
 
     return lines
 
