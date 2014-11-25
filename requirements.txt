@@ -1,4 +1,5 @@
 psutil==2.1.2
 pyserial==2.7
 simplejson==3.6.3
+-e hg+https://bitbucket.org/dyuri/whisper@edd6263b84d012154d1c932e7e78259aef018a44#egg=whisper-dev
 ws4py==0.3.4

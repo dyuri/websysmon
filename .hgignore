@@ -3,3 +3,4 @@ syntax: glob
 *~
 bower_components
 .ropeproject
+*.wrrd

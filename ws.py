@@ -3,7 +3,9 @@
 import asyncio
 import psutil
 import simplejson
-import datetime
+import time
+import os
+import whisper
 from ws4py.async_websocket import WebSocket
 from ws4py.server.tulipserver import WebSocketProtocol
 
@@ -15,9 +17,64 @@ probes = []
 
 class Probe():
 
-    def __init__(self, name, valueCount=1):
+    DEFAULT_ARCHIVE_LIST = [
+        '1:3600', # 1 sec per data for an hour
+        '1m:6h',  # 1 min per data for 6 hours
+        '1h:31d', # 1 hour per data for a month
+        '6h:2y'   # 6 hours per data for two years
+    ]
+
+    def __init__(self, name, valueCount=1, rrdFileName=None, rrdRoot=None,
+                 xFilesFactor=0.5, aggregationMethod='average', archiveList=None,
+                 minMeasureInterval=0.9):
         self.name = name
         self.valueCount = valueCount
+        self.minMeasureInterval = minMeasureInterval
+        self.xFilesFactor = xFilesFactor
+        self.aggregationMethod = aggregationMethod
+        self.archiveList = [whisper.parseRetentionDef(retDef) for retDef
+                            in (archiveList if archiveList else Probe.DEFAULT_ARCHIVE_LIST)]
+
+        if rrdRoot is None:
+            rrdRoot = os.path.dirname(os.path.realpath(__file__))
+        if rrdFileName is None:
+            rrdFileName = type(self).__name__ + "_" + self.name.replace(" ", "_")
+
+
+        self.rrdFilePrefix = os.path.join(rrdRoot, rrdFileName)
+
+        # create rrd files if they don't exist yet
+        self.create_rrd_files()
+
+        self._lastMeasurement = None
+
+    def get_aggregationMethod(self, postfix):
+        return self.aggregationMethod
+
+    def create_rrd_files(self, overwrite=False):
+        for i in range(0, self.valueCount):
+            self.create_rrd_file(i, overwrite)
+
+    def create_rrd_file(self, postfix, overwrite=False):
+        path = self.get_rrd_file(postfix)
+
+        if os.path.exists(path) and not overwrite:
+            return
+
+        whisper.create(path, self.archiveList, self.xFilesFactor,
+                       self.get_aggregationMethod(postfix))
+
+    def update_rrds(self, timestamp, values):
+        for i in range(0, self.valueCount):
+            self.update_rrd(i, timestamp, values[i])
+
+    def update_rrd(self, postfix, timestamp, value):
+        path = self.get_rrd_file(postfix)
+
+        whisper.update(path, value, timestamp / 1000)
+
+    def get_rrd_file(self, postfix=None):
+        return self.rrdFilePrefix + str(postfix if postfix else "") + ".wrrd"
 
     def get_values(self):
         raise NotImplementedError()
@@ -26,7 +83,32 @@ class Probe():
         raise NotImplementedError()
 
     def get_ts(self):
-        return int(datetime.datetime.now().timestamp() * 1000)
+        return int(time.time() * 1000)
+
+    def do_measure(self):
+        values = self.get_values()
+        ts = self.get_ts()
+
+        self.update_rrds(ts, values)
+
+        measurement = {
+            "values": values,
+            "timestamp": ts
+        }
+
+        self._lastMeasurement = measurement
+
+        return measurement
+
+    def get_data(self):
+        ts = self.get_ts()
+
+        if not self._lastMeasurement or self._lastMeasurement["timestamp"] + self.minMeasureInterval * 1000 < ts:
+            measurement = self.do_measure()
+        else:
+            measurement = self._lastMeasurement
+
+        return measurement
 
 
 class CpuProbe(Probe):
@@ -45,10 +127,7 @@ class CpuProbe(Probe):
     def get_values(self):
         cpu_percent = psutil.cpu_percent(None, True)
 
-        return {
-            "values": cpu_percent,
-            "timestamp": self.get_ts(),
-        }
+        return cpu_percent
 
 
 class SingleCpuProbe(Probe):
@@ -68,10 +147,7 @@ class SingleCpuProbe(Probe):
     def get_values(self):
         cpu_percent = psutil.cpu_percent()
 
-        return {
-            "values": cpu_percent,
-            "timestamp": self.get_ts(),
-        }
+        return [cpu_percent]
 
 
 class ArduinoSingleSensorProbe(Probe):
@@ -94,10 +170,7 @@ class ArduinoSingleSensorProbe(Probe):
     def get_values(self):
         value = get_value(self.port, self.pspeed, self.sensor)
 
-        return {
-            "values": value,
-            "timestamp": self.get_ts(),
-        }
+        return [value]
 
 probes.append(CpuProbe())
 probes.append(SingleCpuProbe())
@@ -108,7 +181,7 @@ probes.append(ArduinoSingleSensorProbe("temperature", extent=[15, 40]))
 @asyncio.coroutine
 def sysinfo():
     while True:
-        response = { probe.name: probe.get_values() for probe in probes }
+        response = { probe.name: probe.get_data() for probe in probes }
 
         json_response = simplejson.dumps({ "data": response })
         for ws in websockets:
@@ -144,13 +217,14 @@ class SysInfoWebSocket(WebSocket):
         websockets.remove(self)
 
 
-loop = asyncio.get_event_loop()
-start_server(loop)
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    start_server(loop)
 
-try:
-    loop.run_forever()
-except KeyboardInterrupt:
-    pass
-finally:
-    print("Closing loop.")
-    loop.close()
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print("Closing loop.")
+        loop.close()
