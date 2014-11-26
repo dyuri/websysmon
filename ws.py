@@ -69,9 +69,10 @@ class Probe():
             self.update_rrd(i, timestamp, values[i])
 
     def update_rrd(self, postfix, timestamp, value):
-        path = self.get_rrd_file(postfix)
+        if value is not None:
+            path = self.get_rrd_file(postfix)
 
-        whisper.update(path, value, timestamp / 1000)
+            whisper.update(path, value, timestamp / 1000)
 
     def get_rrd_file(self, postfix=None):
         return self.rrdFilePrefix + str(postfix if postfix else "") + ".wrrd"
