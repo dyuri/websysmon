@@ -176,7 +176,8 @@ class ArduinoSingleSensorProbe(Probe):
 probes.append(CpuProbe())
 probes.append(SingleCpuProbe())
 probes.append(ArduinoSingleSensorProbe("light"))
-probes.append(ArduinoSingleSensorProbe("temperature", extent=[15, 40]))
+probes.append(ArduinoSingleSensorProbe("DHT_temp", extent=[15, 40]))
+probes.append(ArduinoSingleSensorProbe("DHT_hum", extent=[10, 90]))
 
 
 @asyncio.coroutine

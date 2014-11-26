@@ -31,7 +31,10 @@ def get_values(port=PORT, pspeed=PSPEED):
 
     while line != "<":
         key, value = line.split(":")
-        lines[key.strip()] = float(value.strip())
+        try:
+            lines[key.strip()] = float(value.strip())
+        except:
+            pass
         line = ser.readline().decode("latin-1").strip()
 
     cache[cache_key] = {
