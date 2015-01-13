@@ -3,7 +3,9 @@
   "version": "0.0.1",
   "dependencies": {
     "d3": "~3.x",
-    "cubism": "~1.6"
+    "cubism": "~1.6",
+    "bacon": "~0.7.41",
+    "core_js": "~0.2.1"
   },
   "private": true
 }
