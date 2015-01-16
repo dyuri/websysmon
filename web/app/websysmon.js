@@ -149,8 +149,104 @@
     };
   });
 
+  Core.register('d3gauge', function (sandbox) {
+    var d3 = sandbox.x('d3'),
+        dataBuffer = { buffer: [] },
+        currentData = {},
+        width = 400,
+        height = 400,
+        key = 'cpu'; // TODO
+
+    var interpolateHsl = function (a, b) {
+      var i = d3.interpolateString(a, b);
+      return function (t) {
+        return d3.hsl(i(t));
+      };
+    };
+
+    return {
+      configuration: {},
+      init: function () {
+        sandbox.listen('configuration', this.configure.bind(this));
+        sandbox.listen('dataupdate', this.dataupdate.bind(this));
+      },
+      configure: function (configuration) {
+        var itemNum;
+
+        this.configuration = configuration[key]; // TODO
+        itemNum = this.configuration.valueCount;
+
+        this.color = d3.scale.linear()
+          .range(["hsl(80, 50%, 50%)", "hsl(0, 50%, 50%)"])
+          .interpolate(interpolateHsl);
+
+        this.arc = d3.svg.arc()
+          .startAngle(Math.PI)
+          .endAngle(function (d) { return ( d.value/100 * 1.5 + 1 ) * Math.PI; })
+          .innerRadius(function (d) { return (width/2)/itemNum * d.index; })
+          .outerRadius(function (d) { return (width/2)/itemNum * (d.index+1); });
+        
+        this.arcTween = function (d) {
+          var i = d3.interpolateNumber(d.previousValue, d.value);
+          return function (t) { d.value = i(t); return this.arc(d); }.bind(this);
+        };
+
+        // TODO
+        this.svg = d3.select(this.el).append("svg")
+            .attr("width", width)
+            .attr("height", height)
+          .append("g")
+            .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
+
+        this.field = this.svg.selectAll("g")
+            .data(this.getData.bind(this))
+          .enter().append("g");
+
+        this.field.append("path");
+
+        d3.transition().duration(0).each(this.update.bind(this));
+      },
+      getData: function () {
+        return currentData[key] ? currentData[key].values.map(function (v, i) {
+          return {
+            value: v,
+            index: i
+          };
+        }) : (function (l) {
+          var i, arr = [];
+          for (i = 0; i < l; i++) {
+            arr.push({value: 0, index: i});
+          }
+          return arr;
+        }(this.configuration.valueCount)); // TODO
+      },
+      update: function () {
+        this.field = this.field
+            .each(function (d) { this._value = d.value; })
+          .data(this.getData.bind(this))
+            .each(function (d) { d.previousValue = this._value; });
+
+        this.field.select("path")
+          .transition()
+            .ease("cubic-in-out")
+            .attrTween("d", this.arcTween.bind(this))
+            .style("fill", function (d) { return this.color(d.value/100); }.bind(this));
+      },
+      dataupdate: function (d) {
+        if (d.dataBuffer) {
+          dataBuffer.buffer = d.dataBuffer.buffer;
+        }
+        if (d.data) {
+          currentData = d.data;
+        }
+        this.update();
+      }
+    };
+  });
+
   Core.start('wsdatasource');
   Core.start('cubismgraph');
+  Core.start('d3gauge');
 
 /* normal d3 charts */
 /*
